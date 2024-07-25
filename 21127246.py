@@ -408,6 +408,7 @@ def StepVisualizer(time_label, root, canvas, cell_size, step, path, time = 0, ti
     if step < len(path) - 1:
         time_label.config(text="Time: "+ str(time) + "s")
         if step >= 0:
+            rootAwaitFunction.pop(0)
             i = path[len(path) - step - 1]
             #clear current
             Mark_position(canvas, i["y"], i["x"], cell_size, '', 'white', 'black')
@@ -431,11 +432,13 @@ def AlgorithmPicker(algorithm):
     return A(0)
 
 def Level1(canvas, frame):
-    return AlgorithmsSelectState(canvas, frame)
+    global level
+    level = 1
+    return AlgorithmsSelectState(canvas, frame);
 
 
 def RuntimeState(root, canvas, frame, algorithm):
-    global Flag, rootAwaitFunction
+    global Flag, rootAwaitFunction, level
     label, frame, time_label = RunTimeInformation(frame)
     cell_size = 500 / boardSize[0]
     if boardSize[0] < boardSize[1]:
@@ -496,6 +499,39 @@ def AlgorithmsSelectState(canvas, frame):
     frame = AlgorithmsSelectLabel(frame)
     canvas = AlgorithmsSelectButtons(canvas)
     return canvas, frame
+
+def LevelsSelectLabel(frame):
+    for child in frame.winfo_children():
+        child.destroy()
+    label = tk.Label(frame, text="Select a level", font=("Helvetica", 20), bg='white')
+    label.pack()
+
+    return frame
+
+def LevelsSelectButtons(canvas):
+    global root, frame
+    canvas.delete("all")
+    y = 0
+    levelList = [lambda: Level1(canvas, frame)]
+
+    for i in range(1):
+        topMargin = 20
+        if i == Algorithm.bfs:
+            topMargin = 30
+        y += topMargin
+        button = tk.Button(canvas, 
+                       text=str(i + 1), 
+                       command=lambda i=levelList[i]:RuntimeState(root, canvas, frame, i), 
+                       anchor=tk.W,
+                       font=('Arial', 20),
+                       compound="c",
+                       width=5,
+                       height=1,
+                       justify="center")
+        canvas.create_window(210, y, anchor=tk.NW, window=button)
+        y += 60
+    
+    return canvas
 
 def main():
     global root, canvas, frame
