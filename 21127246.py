@@ -4,8 +4,10 @@ import sys
 from queue import Queue, LifoQueue, PriorityQueue
 from enum import Enum, auto
 #File input
-file = [0 for _ in range(4)]
-file[0] = "level1.txt"
+file = [
+    "level1.txt",
+    "level2.txt"
+    ]
 #for testing file 5
 #file.append("critical")
 #Size of board m x n
@@ -13,7 +15,8 @@ boardSize = [0 for _ in range(2)]
 board = []
 start = []
 goal = []
-level = 0
+tollBoost = []
+level = 1
 time = 0
 fuel = 0
 #UI' componet
@@ -195,7 +198,8 @@ def UCS(pairStartGoal):
     return Flag.validFound, Path(s, g, edges)
 #Heuristic function
 def H(g, n):
-    return (g["x"] - n["x"]) ** 2 + (g["y"] - n["y"]) ** 2
+    global board
+    return (g["x"] - n["x"]) ** 2 + (g["y"] - n["y"]) ** 2 + board[n["y"]][n["x"]]
 #Greedy best first search
 def GBFS(pairStartGoal):
     #variables
@@ -281,7 +285,7 @@ def Is_number(n):
         return False
 #Check if goal, start or special nodes overlap
 def ContainOverlap():
-    global start, goal
+    global start, goal, tollBoost
     mark = []
     for i in start:
         if i in mark:
@@ -295,13 +299,19 @@ def ContainOverlap():
         else:
             mark.append(i)
 
+    for i in tollBoost:
+        if i in mark:
+            return True
+        else:
+            mark.append(i)
+
     return False
 
 def BoardInit():
     return [[0 for _ in range(boardSize[1])] for _ in range(boardSize[0])]
 
 def ReadFile(mode):
-    global boardSize, board, start, goal
+    global boardSize, board, start, goal, level, time
     filename = file[mode]
     s = -1
     with open(filename, "r") as f:
@@ -319,6 +329,11 @@ def ReadFile(mode):
                 boardSize[0] = int(values[0])
                 #col
                 boardSize[1] = int(values[1])
+                #level 2 or more
+                if level >= 2:
+                    if len(values) < 3:
+                        return False
+                    time = int(values[2])
                 #set empty board
                 board = BoardInit()
             else:
@@ -328,8 +343,15 @@ def ReadFile(mode):
                 #Set element in the row of board (wall or not)
                 for i in range(boardSize[1]):
                     #if the value is a wall, mark it
-                    if Is_number(values[i]) and int(values[i]) == -1:
-                        board[s][i] = -1
+                    if Is_number(values[i]):
+                        #Level 1 but contain toll booth is false
+                        #Else mark it is toll booth
+                        if int(values[i]) > 0:
+                            if level == 1:
+                                return False
+                            else:
+                                tollBoost.append(values[i])
+                        board[s][i] = int(values[i])
                     #Get start(s) index
                     elif values[i] == "S":
                         start.append({
@@ -345,7 +367,11 @@ def ReadFile(mode):
             # Process the 'values' list as needed
             s += 1
     
-    if s < boardSize[0] or ContainOverlap() or len(start) != len(goal) or (len(start) > 1 and level != 3):
+    if s < boardSize[0] or 
+    ContainOverlap() or 
+    len(start) == 0 or 
+    (len(start) > 1 and level != 3) or 
+    len(goal) != 1:
         return False
 
     return True
@@ -395,12 +421,40 @@ def BoardVisualizer(canvas, cell_size):
     cols = boardSize[1]
 
     Create_grid(canvas, rows, cols, cell_size)
-    for i in start:
-        Mark_position(canvas, i["y"], i["x"], cell_size, 'S', '#d5e8d4', 'green')
+    for i in range(len(start)):
+        ordinal = i == 0 ? "" : str(i) 
+        Mark_position(
+            canvas, 
+            start[i]["y"], 
+            start[i]["x"], 
+            cell_size, 
+            'S' + ordinal, 
+            '#d5e8d4', 
+            'green'
+            )
         
-    for i in goal:
-        Mark_position(canvas, i["y"], i["x"], cell_size, 'G', '#f8cecc', 'red')
-    
+    for i in range(len(goal)):
+        ordinal = i == 0 ? "" : str(i) 
+        Mark_position(
+            canvas, 
+            goal[i]["y"], 
+            goal[i]["x"], 
+            cell_size, 
+            'G' + ordinal, 
+            '#f8cecc', 
+            'red')
+
+    for i in range(len(tollBoost)):
+        ordinal = i == 0 ? "" : str(i) 
+        Mark_position(
+            canvas, 
+            tollBoost[i]["y"], 
+            tollBoost[i]["x"], 
+            cell_size, 
+            str(board[tollBoost[i]["y"]][tollBoost[i]["x"]]), 
+            '#dae8fc', 
+            '#9b9fa5')
+
     return canvas
 
 def StepVisualizer(time_label, root, canvas, cell_size, step, path, time = 0, timeStep = 1):
@@ -434,11 +488,23 @@ def AlgorithmPicker(algorithm):
 def Level1(canvas, frame):
     global level
     level = 1
-    return AlgorithmsSelectState(canvas, frame);
+    return AlgorithmsSelectState(canvas, frame)
+
+def Time(
+    p, 
+    end = len(p) - 1
+    ):
+    t = 0
+    pathLength = len(p) - 1
+    for i in range(end):
+        t += 1 + board[path[pathLength - i]["y"]][path[pathLength - i]["x"]]
+    t += board[path[pathLength - end]["y"]][path[pathLength - end]["x"]]
+
+    return t
 
 
 def RuntimeState(root, canvas, frame, algorithm):
-    global Flag, rootAwaitFunction, level
+    global Flag, rootAwaitFunction, level, time
     label, frame, time_label = RunTimeInformation(frame)
     cell_size = 500 / boardSize[0]
     if boardSize[0] < boardSize[1]:
@@ -446,6 +512,9 @@ def RuntimeState(root, canvas, frame, algorithm):
     canvas = BoardVisualizer(canvas, cell_size)
 
     flag, path = AlgorithmPicker(algorithm)
+    #Check valid time from level 2 and previous adapt give a result
+    if level >= 2 and flag == Flag.validFound:
+        flag = Time(path) > time ? Flag.eTime : Flag.validFound
     if flag == Flag.validFound:
         label.config(text='Found!', fg='Green')
         step = -1
@@ -453,6 +522,8 @@ def RuntimeState(root, canvas, frame, algorithm):
         StepVisualizer(time_label, root, canvas, cell_size, step, path)
     elif flag == Flag.notFound:
         label.config(text='Not Found!', fg='Red')
+    elif flag == Flag.eTime:
+        
 
     return canvas, frame
 
