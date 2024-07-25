@@ -17,6 +17,7 @@ start = []
 goal = []
 tollBoost = []
 level = 1
+timeLimit = 0
 time = 0
 fuel = 0
 #UI' componet
@@ -27,7 +28,8 @@ frame = tk.Frame(root, width=500, height=50, bg="white")
 frame.pack(expand=True, fill=tk.BOTH)
 canvas = tk.Canvas(root, width=10 * 50, height=10 * 50, bg="white")
 canvas.pack()
-rootAwaitFunction = []
+rootAwaitStep = []
+rootAwaitTime = []
 #Flag enum
 class Flag(Enum):
     notFound = auto()
@@ -311,7 +313,7 @@ def BoardInit():
     return [[0 for _ in range(boardSize[1])] for _ in range(boardSize[0])]
 
 def ReadFile(mode):
-    global boardSize, board, start, goal, level, time
+    global boardSize, board, start, goal, level, timeLimit, time
     filename = file[mode]
     s = -1
     with open(filename, "r") as f:
@@ -333,7 +335,8 @@ def ReadFile(mode):
                 if level >= 2:
                     if len(values) < 3:
                         return False
-                    time = int(values[2])
+                    timeLimit = int(values[2])
+                    time = timeLimit
                 #set empty board
                 board = BoardInit()
             else:
@@ -367,11 +370,7 @@ def ReadFile(mode):
             # Process the 'values' list as needed
             s += 1
     
-    if s < boardSize[0] or 
-    ContainOverlap() or 
-    len(start) == 0 or 
-    (len(start) > 1 and level != 3) or 
-    len(goal) != 1:
+    if s < boardSize[0] or ContainOverlap() or len(start) == 0 or (len(start) > 1 and level != 4) or len(goal) != 1:
         return False
 
     return True
@@ -395,10 +394,14 @@ def Mark_position(canvas, row, col, cell_size, text, color, outline):
     canvas.create_text((x1 + x2) // 2, (y1 + y2) // 2, text=text, fill='black')
 
 def RunTimeBack(frame):
-    global canvas, rootAwaitFunction, root
+    global canvas, rootAwaitStep, root, rootAwaitTime
 
-    for i in rootAwaitFunction:
+    for i in rootAwaitStep:
         root.after_cancel(i)
+        rootAwaitStep.pop(0)
+    for i in rootAwaitTime:
+        root.after_cancel(i)
+        rootAwaitTime.pop(0)
     canvas, frame = AlgorithmsSelectState(canvas, frame)
 
 def RunTimeInformation(frame):
@@ -422,7 +425,7 @@ def BoardVisualizer(canvas, cell_size):
 
     Create_grid(canvas, rows, cols, cell_size)
     for i in range(len(start)):
-        ordinal = i == 0 ? "" : str(i) 
+        ordinal = "" if i == 0 else str(i) 
         Mark_position(
             canvas, 
             start[i]["y"], 
@@ -434,7 +437,7 @@ def BoardVisualizer(canvas, cell_size):
             )
         
     for i in range(len(goal)):
-        ordinal = i == 0 ? "" : str(i) 
+        ordinal = "" if i == 0 else str(i) 
         Mark_position(
             canvas, 
             goal[i]["y"], 
@@ -445,7 +448,7 @@ def BoardVisualizer(canvas, cell_size):
             'red')
 
     for i in range(len(tollBoost)):
-        ordinal = i == 0 ? "" : str(i) 
+        ordinal = "" if i == 0 else str(i)  
         Mark_position(
             canvas, 
             tollBoost[i]["y"], 
@@ -457,12 +460,12 @@ def BoardVisualizer(canvas, cell_size):
 
     return canvas
 
-def StepVisualizer(time_label, root, canvas, cell_size, step, path, time = 0, timeStep = 1):
-    global rootAwaitFunction
+def StepVisualizer(root, canvas, cell_size, step, path):
+    global rootAwaitStep
     if step < len(path) - 1:
-        time_label.config(text="Time: "+ str(time) + "s")
+        
         if step >= 0:
-            rootAwaitFunction.pop(0)
+            rootAwaitStep.pop(0)
             i = path[len(path) - step - 1]
             #clear current
             Mark_position(canvas, i["y"], i["x"], cell_size, '', 'white', 'black')
@@ -471,8 +474,8 @@ def StepVisualizer(time_label, root, canvas, cell_size, step, path, time = 0, ti
         #go to next
         Mark_position(canvas, i["y"], i["x"], cell_size, 'S', '#d5e8d4', 'green')
         # Define a lambda function that calls your main function with arguments
-        call_with_args = lambda: StepVisualizer(time_label, root, canvas, cell_size, step + 1, path, time + timeStep)
-        rootAwaitFunction.append(root.after(1000, call_with_args))
+        call_with_args = lambda: StepVisualizer(root, canvas, cell_size, step + 1, path)
+        rootAwaitStep.append(root.after(1000, call_with_args))
 #Select algorithm in level 1
 def AlgorithmPicker(algorithm):
     if algorithm == Algorithm.bfs:
@@ -491,20 +494,32 @@ def Level1(canvas, frame):
     return AlgorithmsSelectState(canvas, frame)
 
 def Time(
-    p, 
-    end = len(p) - 1
+    path, 
+    end
     ):
     t = 0
-    pathLength = len(p) - 1
+    pathLength = len(path) - 1
     for i in range(end):
         t += 1 + board[path[pathLength - i]["y"]][path[pathLength - i]["x"]]
     t += board[path[pathLength - end]["y"]][path[pathLength - end]["x"]]
 
     return t
 
+def TimeLabelConfig(time_label, timeStep):
+    global time, rootAwaitTime, timeLimit
+    if rootAwaitTime != []:
+        rootAwaitTime.pop(0)
+    if time > timeLimit or time < 0:
+        return
+    time_label.config(text="Time: "+ str(time) + "m")
+    time += timeStep
+    #React to limit
+    call_with_args = lambda: TimeLabelConfig(time_label, timeStep)
+    rootAwaitTime.append(root.after(1000, call_with_args))
+
 
 def RuntimeState(root, canvas, frame, algorithm):
-    global Flag, rootAwaitFunction, level, time
+    global Flag, level, timeLimit
     label, frame, time_label = RunTimeInformation(frame)
     cell_size = 500 / boardSize[0]
     if boardSize[0] < boardSize[1]:
@@ -514,16 +529,24 @@ def RuntimeState(root, canvas, frame, algorithm):
     flag, path = AlgorithmPicker(algorithm)
     #Check valid time from level 2 and previous adapt give a result
     if level >= 2 and flag == Flag.validFound:
-        flag = Time(path) > time ? Flag.eTime : Flag.validFound
+        flag = Flag.eTime if Time(path, len(path) - 1) > timeLimit else Flag.validFound
     if flag == Flag.validFound:
         label.config(text='Found!', fg='Green')
         step = -1
         # Define a lambda function that calls your main function with arguments
-        StepVisualizer(time_label, root, canvas, cell_size, step, path)
+        StepVisualizer(root, canvas, cell_size, step, path)
+        if level == 1:
+            timeLimit = Time(path, len(path) - 1)
+            TimeLabelConfig(time_label, 1)
+        else:
+            TimeLabelConfig(time_label, -1)
     elif flag == Flag.notFound:
         label.config(text='Not Found!', fg='Red')
     elif flag == Flag.eTime:
-        
+        label.config(text='Found!', fg='Green')
+        step = -1
+        StepVisualizer(root, canvas, cell_size, step, path)
+        TimeLabelConfig(time_label, -1)
 
     return canvas, frame
 
@@ -606,7 +629,7 @@ def LevelsSelectButtons(canvas):
 
 def main():
     global root, canvas, frame
-    if ReadFile(0) == False:
+    if ReadFile(level - 1) == False:
         # Create a text widget
         # Create a label with red text color and large font size
         canvas.create_text(100, 235, anchor="nw", text="Not valid input file", fill='red', font=("Arial", 30))
